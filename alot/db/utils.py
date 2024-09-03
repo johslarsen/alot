@@ -335,6 +335,9 @@ def extract_headers(mail, headers=None):
     return headertext
 
 
+ESC = '\x1b' # control character used in ANSI coloring
+
+
 def render_part(part, field_key='copiousoutput'):
     """
     renders a non-multipart email part into displayable plaintext by piping its
@@ -342,7 +345,15 @@ def render_part(part, field_key='copiousoutput'):
     the mailcap entry for this part's ctype.
     """
     ctype = part.get_content_type()
-    raw_payload = remove_cte(part)
+    raw_payload = None
+    params = dict(part.get_params(failobj=[]))
+    if ctype.startswith('text/'): # strip control characters from untrusted body
+        raw_payload = string_sanitize(remove_cte(part, as_string=True))
+        params = [p for p in params if p[0] != "charset"]
+        params.append(["charset", "utf-8"]) # update to reflect python string
+    else: # unless it is non-text, to avoid mangling binary data
+        raw_payload = remove_cte(part)
+
     rendered_payload = None
     # get mime handler
     _, entry = settings.mailcap_find_match(ctype, key=field_key)
@@ -365,13 +376,14 @@ def render_part(part, field_key='copiousoutput'):
             stdin = raw_payload
 
         # read parameter, create handler command
-        parms = tuple('='.join(p) for p in part.get_params(failobj=[]))
+
+        plist = tuple('='.join(p) for p in params)
 
         # create and call external command
         cmd = mailcap.subst(entry['view'], ctype,
-                            filename=tempfile_name, plist=parms)
+                            filename=tempfile_name, plist=plist)
         logging.debug('command: %s', cmd)
-        logging.debug('parms: %s', str(parms))
+        logging.debug('parms: %s', str(plist))
         cmdlist = split_commandstring(cmd)
         # call handler
         stdout, _, _ = helper.call_cmd(cmdlist, stdin=stdin)
@@ -499,7 +511,7 @@ def extract_body_part(body_part):
         **{'field_key': 'view'} if body_part.get_content_type() == 'text/plain'
         else {})
     if rendered_payload:  # handler had output
-        displaystring = string_sanitize(rendered_payload)
+        displaystring = string_sanitize(rendered_payload, allowed='\n\t'+ESC)
     elif body_part.get_content_type() == 'text/plain':
         displaystring = string_sanitize(remove_cte(body_part, as_string=True))
     else:

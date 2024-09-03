@@ -44,18 +44,16 @@ def split_commandstring(cmdstring):
 def unicode_printable(c):
     """
     Checks if the given character is a printable Unicode character, i.e., not a
-    private/unassigned character and not a control character other than tab or
-    newline.
+    private/unassigned character.
     """
-    if c in ('\n', '\t'):
-        return True
     return unicodedata.category(c) not in ('Cc', 'Cn', 'Co')
 
 
-def string_sanitize(string, tab_width=8):
+def string_sanitize(string, allowed='\n\t', tab_width=8):
     r"""
     strips, and replaces non-printable characters
 
+    :param allowed: list of e.g. control characters to also keep
     :param tab_width: number of spaces to replace tabs with. Read from
                       `globals.tabwidth` setting if `None`
     :type tab_width: int or `None`
@@ -68,7 +66,7 @@ def string_sanitize(string, tab_width=8):
     'foo             bar'
     """
 
-    string = ''.join([c for c in string if unicode_printable(c)])
+    string = ''.join([c for c in string if c in allowed or unicode_printable(c)])
 
     lines = list()
     for line in string.split('\n'):
